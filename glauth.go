@@ -3,6 +3,7 @@ package main
 import (
 	"expvar"
 	"fmt"
+	"github.com/GeertJohan/yubigo"
 	"github.com/BurntSushi/toml"
 	"github.com/docopt/docopt-go"
 	"github.com/nmcclain/ldap"
@@ -72,6 +73,8 @@ type configUser struct {
 	OtherGroups  []int
 	PassSHA256   string
 	PrimaryGroup int
+	OTPSecret	 string
+	Yubikey		 string
 	SSHKeys      []string
 	Disabled     bool
 	UnixID       int
@@ -89,6 +92,8 @@ type configGroup struct {
 type config struct {
 	API                configAPI
 	Backend            configBackend
+	YubikeyClientID	   string
+	YubikeySecret	   string
 	Debug              bool
 	Frontend           configFrontend
 	Groups             []configGroup
@@ -123,6 +128,16 @@ func main() {
 		go RunAPI(cfg)
 	}
 
+	yubiAuth := (*yubigo.YubiAuth)(nil)
+
+	if len(cfg.YubikeyClientID) > 0 && len(cfg.YubikeySecret) > 0 {
+		yubiAuth, err = yubigo.NewYubiAuth(cfg.YubikeyClientID, cfg.YubikeySecret)
+
+		if err != nil {
+			log.Fatalf("Yubikey Auth failed");
+		}
+	}
+
 	// configure the backend
 	s := ldap.NewServer()
 	s.EnforceLDAP = true
@@ -131,7 +146,7 @@ func main() {
 	case "ldap":
 		handler = newLdapHandler(cfg)
 	case "config":
-		handler = newConfigHandler(cfg)
+		handler = newConfigHandler(cfg, yubiAuth)
 	default:
 		log.Fatalf("Unsupported backend %s - must be 'config' or 'ldap'.", cfg.Backend.Datastore)
 	}
