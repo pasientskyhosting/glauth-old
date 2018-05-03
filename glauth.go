@@ -49,16 +49,23 @@ type Backend interface {
 // config file
 type configBackend struct {
 	BaseDN    string
+	NameAttr  string
 	Datastore string
 	Insecure  bool     // For LDAP backend only
 	Servers   []string // For LDAP backend only
 }
-type configFrontend struct {
-	AllowedBaseDNs []string // For LDAP backend only
+
+type configTLS struct {
+	Enabled		   bool
+	Listen		   string
 	Cert           string
 	Key            string
+}
+
+type configFrontend struct {
+	AllowedBaseDNs []string // For LDAP backend only
 	Listen         string
-	TLS            bool
+	TLS            configTLS
 }
 type configAPI struct {
 	Cert        string
@@ -155,18 +162,23 @@ func main() {
 	s.SearchFunc("", handler)
 	s.CloseFunc("", handler)
 
+	
+
 	// start the frontend server
-	if cfg.Frontend.TLS {
-		log.Notice(fmt.Sprintf("Frontend LDAPS server listening on %s", cfg.Frontend.Listen))
-		if err := s.ListenAndServeTLS(cfg.Frontend.Listen, cfg.Frontend.Cert, cfg.Frontend.Key); err != nil {
-			log.Fatalf("LDAP Server Failed: %s", err.Error())
-		}
-	} else {
-		log.Notice(fmt.Sprintf("Frontend LDAP server listening on %s", cfg.Frontend.Listen))
-		if err := s.ListenAndServe(cfg.Frontend.Listen); err != nil {
-			log.Fatalf("LDAP Server Failed: %s", err.Error())
-		}
+	if cfg.Frontend.TLS.Enabled {
+		go func() {
+			log.Notice(fmt.Sprintf("Frontend LDAPS server listening on %s", cfg.Frontend.TLS.Listen))
+			if err := s.ListenAndServeTLS(cfg.Frontend.TLS.Listen, cfg.Frontend.TLS.Cert, cfg.Frontend.TLS.Key); err != nil {
+				log.Fatalf("LDAP Server Failed: %s", err.Error())
+			}
+		}()
 	}
+
+	log.Notice(fmt.Sprintf("Frontend LDAP server listening on %s", cfg.Frontend.Listen))
+	if err := s.ListenAndServe(cfg.Frontend.Listen); err != nil {
+		log.Fatalf("LDAP Server Failed: %s", err.Error())
+	}
+
 	log.Critical("AP exit")
 }
 
@@ -174,7 +186,7 @@ func main() {
 func doConfig() (*config, error) {
 	cfg := config{}
 	// setup defaults
-	cfg.Frontend.TLS = true
+	cfg.Frontend.TLS.Enabled = false
 
 	// parse the command-line args
 	args, err := docopt.Parse(usage, nil, true, version, false)

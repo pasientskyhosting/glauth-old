@@ -39,14 +39,15 @@ func (h configHandler) Bind(bindDN, bindSimplePw string, conn net.Conn) (resultC
 	groupName := ""
 	userName := ""
 	if len(parts) == 1 {
-		userName = strings.TrimPrefix(parts[0], "cn=")
-	} else if len(parts) == 2 {
-		userName = strings.TrimPrefix(parts[0], "cn=")
-		groupName = strings.TrimPrefix(parts[1], "ou=")
-	} else {
-		log.Warning(fmt.Sprintf("Bind Error: BindDN %s should have only one or two parts (has %d)", bindDN, len(parts)))
-		return ldap.LDAPResultInvalidCredentials, nil
+		userName = strings.TrimPrefix(parts[0], h.cfg.Backend.NameAttr+"=")
+	} else if len(parts) > 1 {
+		userName = strings.TrimPrefix(parts[0], h.cfg.Backend.NameAttr+"=")
+		groupName = strings.TrimPrefix(strings.TrimPrefix(parts[1], "cn="), "ou=")
 	}
+	// } else {
+	// 	log.Warning(fmt.Sprintf("Bind Error: BindDN %s should have only one or two parts (has %d)", bindDN, len(parts)))
+	// 	return ldap.LDAPResultInvalidCredentials, nil
+	// }
 	// find the user
 	user := configUser{}
 	found := false
@@ -159,6 +160,7 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 	case "posixgroup":
 		for _, g := range h.cfg.Groups {
 			attrs := []*ldap.EntryAttribute{}
+			attrs = append(attrs, &ldap.EntryAttribute{"uid", []string{g.Name}})
 			attrs = append(attrs, &ldap.EntryAttribute{"cn", []string{g.Name}})
 			attrs = append(attrs, &ldap.EntryAttribute{"description", []string{fmt.Sprintf("%s via LDAP", g.Name)}})
 			attrs = append(attrs, &ldap.EntryAttribute{"gidNumber", []string{fmt.Sprintf("%d", g.UnixID)}})
@@ -211,11 +213,13 @@ func (h configHandler) Search(bindDN string, searchReq ldap.SearchRequest, conn 
 			}
 
 			attrs = append(attrs, &ldap.EntryAttribute{"description", []string{fmt.Sprintf("%s via LDAP", u.Name)}})
-			attrs = append(attrs, &ldap.EntryAttribute{"gecos", []string{fmt.Sprintf("%s via LDAP", u.Name)}})
+			attrs = append(attrs, &ldap.EntryAttribute{"gecos", []string{fmt.Sprintf("%s", u.Name)}})
 			attrs = append(attrs, &ldap.EntryAttribute{"gidNumber", []string{fmt.Sprintf("%d", u.PrimaryGroup)}})
 			attrs = append(attrs, &ldap.EntryAttribute{"memberOf", h.getGroupDNs(u.OtherGroups)})
 			if len(u.SSHKeys) > 0 {
 				attrs = append(attrs, &ldap.EntryAttribute{"sshPublicKey", u.SSHKeys})
+				
+				attrs = append(attrs, &ldap.EntryAttribute{"ipaSshPubKey", u.SSHKeys})
 			}
 			dn := fmt.Sprintf("cn=%s,ou=%s,%s", u.Name, h.getGroupName(u.PrimaryGroup), h.cfg.Backend.BaseDN)
 			entries = append(entries, &ldap.Entry{dn, attrs})
