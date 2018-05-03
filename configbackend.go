@@ -207,10 +207,22 @@ func (h configHandler) getGroupMembers(gid int) []string {
 			}
 		}
 	}
+
 	m := []string{}
 	for k, _ := range members {
 		m = append(m, k)
 	}
+
+	for _, g := range h.cfg.Groups {
+		if gid == g.UnixID {
+			for _, includegroupid := range g.IncludeGroups {
+				if includegroupid != gid {
+					m = append(m, h.getGroupMembers(includegroupid)...)
+				}
+			}
+		}
+	}
+
 	return m
 }
 
@@ -228,10 +240,24 @@ func (h configHandler) getGroupMemberIDs(gid int) []string {
 			}
 		}
 	}
+	
 	m := []string{}
 	for k, _ := range members {
 		m = append(m, k)
 	}
+	
+	for _, g := range h.cfg.Groups {
+		if gid == g.UnixID {
+			for _, includegroupid := range g.IncludeGroups {
+				if includegroupid == gid {
+					log.Warning(fmt.Sprintf("Group: %d - Ignoring myself as included group", includegroupid))
+				} else {
+					m = append(m, h.getGroupMemberIDs(includegroupid)...)
+				}
+			}
+		}
+	}
+	
 	return m
 }
 
@@ -256,6 +282,7 @@ func (h configHandler) getGroupDNs(gids []int) []string {
 //
 func (h configHandler) getGroupName(gid int) string {
 	for _, g := range h.cfg.Groups {
+		// log.Debug(fmt.Sprintf("%s: %s", g.Name, g.OtherGroups))
 		if g.UnixID == gid {
 			return g.Name
 		}
