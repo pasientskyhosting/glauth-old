@@ -1,4 +1,4 @@
-FROM alpine:latest
+FROM alpine:3.15
 
 COPY bin/glauth64      /app/glauth64
 COPY sample-simple.cfg /data/glauth.cfg
